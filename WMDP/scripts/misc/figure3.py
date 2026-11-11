@@ -6,6 +6,11 @@ import shutil
 from pathlib import Path
 
 
+def artifact_directory(root, category):
+    """Resolve a run under artifacts/tamia/runs/<name> to its artifact category."""
+    return root.parent.parent / category / root.name
+
+
 def experiments(source, root, cache, recipe):
     """Build two defenses and paired trials; the shared N=20/M=1 case runs once."""
     records = []
@@ -21,7 +26,7 @@ def experiments(source, root, cache, recipe):
             {k: v for k, v in settings.items() if k not in {"config", "unlearn"}}
         )
         config["logger"].update(name=method)
-        config["logger"]["json"]["root"] = str(root / "models")
+        config["logger"]["json"]["root"] = str(artifact_directory(root, "evals"))
         records.append(
             {
                 "kind": "defense",
@@ -39,7 +44,7 @@ def experiments(source, root, cache, recipe):
                 key = f"{method}-n{samples}-m{epochs}-seed{seed}"
                 config = json.loads((source / recipe["attack_config"]).read_text())
                 config["overall"].update(
-                    model_name=str(root / "models" / method / "checkpoints"),
+                    model_name=str(artifact_directory(root, "models") / method),
                     cache_dir=str(cache),
                     seed=seed,
                 )
@@ -49,7 +54,9 @@ def experiments(source, root, cache, recipe):
                     lr=recipe["attack_lr"],
                 )
                 config["logger"].update(name=key)
-                config["logger"]["json"]["root"] = str(root / "attacks")
+                config["logger"]["json"]["root"] = str(
+                    artifact_directory(root, "evals")
+                )
                 records.append(
                     {
                         "kind": "attack",
@@ -66,16 +73,26 @@ def experiments(source, root, cache, recipe):
 
 
 def prepare(source, root, cache, recipe):
-    root.mkdir(parents=True, exist_ok=False)
-    directory = root / "configs"
-    directory.mkdir(exist_ok=True)
-    for name in ("models", "attacks", "logs", "metrics"):
-        (root / name).mkdir(exist_ok=True)
+    directories = [root] + [
+        artifact_directory(root, category) for category in ("models", "evals", "logs")
+    ]
+    for path in directories:
+        if path.exists():
+            raise FileExistsError(path)
     records = experiments(source, root, cache, recipe)
+    for path in directories:
+        path.mkdir(parents=True, exist_ok=False)
+    directory = root / "configs"
+    directory.mkdir()
     for record in records:
         path = directory / (record["key"] + ".json")
         path.write_text(json.dumps(record.pop("config"), indent=2))
         record["config_path"] = str(path)
+        model = artifact_directory(root, "models") / record["key"]
+        output = artifact_directory(root, "evals") / record["key"]
+        model.mkdir()
+        output.mkdir()
+        (output / "checkpoints").symlink_to(model.resolve(), target_is_directory=True)
     (root / "experiments.json").write_text(json.dumps(records, indent=2))
     return records
 
@@ -102,10 +119,9 @@ def evaluation_scores(output, expected_model):
 
 def finish(root, record):
     """Validate completed training and full evaluations against frozen settings."""
-    config = json.loads(Path(record["config_path"]).read_text())
-    output = Path(config["logger"]["json"]["root"]) / config["logger"]["name"]
-    expected_model = output / "checkpoints"
-    destination = root / "metrics" / record["key"]
+    output = artifact_directory(root, "evals") / record["key"]
+    expected_model = artifact_directory(root, "models") / record["key"]
+    destination = artifact_directory(root, "evals") / record["key"]
     destination.mkdir(parents=True, exist_ok=True)
     result = {**record, "metrics": {}}
     runtime = json.loads((destination / "runtime.json").read_text())
@@ -115,7 +131,9 @@ def finish(root, record):
         assert runtime["dataset_size"] == record["samples"]
         assert len(set(runtime["selected_indices"])) == record["samples"]
         assert abs(runtime["completed_epochs"] - record["epochs"]) < 1e-6
-    for task, (path, accuracy) in evaluation_scores(output, expected_model).items():
+    for task, (path, accuracy) in evaluation_scores(
+        output / "raw", expected_model
+    ).items():
         shutil.copy2(
             path, destination / ("mmlu.json" if task == "mmlu" else "wmdp.json")
         )
@@ -137,13 +155,15 @@ def origin(root, model):
     sys.path.insert(0, str(Path.cwd() / "src"))
     from metrics.few_shots import eval_few_shots
 
-    output = root / "origin"
+    output = artifact_directory(root, "evals") / "origin"
     output.mkdir(parents=True, exist_ok=True)
     for folder, task in [("mmlu.json", "mmlu"), ("wmdp.json", "wmdp_bio")]:
         eval_few_shots(
-            model_name=model, task_list=[task], output_path=str(output / folder)
+            model_name=model, task_list=[task], output_path=str(output / "raw" / folder)
         )
-    scores = evaluation_scores(output, Path(model))
+    scores = evaluation_scores(output / "raw", Path(model))
+    for task, (path, _) in scores.items():
+        shutil.copy2(path, output / ("mmlu.json" if task == "mmlu" else "wmdp.json"))
     result = {
         "model": model,
         "metrics": {task: accuracy for task, (_, accuracy) in scores.items()},
@@ -156,12 +176,12 @@ def collect(root):
     records = json.loads((root / "experiments.json").read_text())
     results = []
     for record in records:
-        path = root / "metrics" / record["key"] / "result.json"
+        path = artifact_directory(root, "evals") / record["key"] / "result.json"
         if path.exists():
             results.append(json.loads(path.read_text()))
     selected = {}
     for run in results:
-        path = root / "metrics" / run["key"] / "runtime.json"
+        path = artifact_directory(root, "evals") / run["key"] / "runtime.json"
         if run["kind"] == "attack" and path.exists():
             runtime = json.loads(path.read_text())
             selected[(run["method"], run["samples"], run["epochs"], run["seed"])] = (
@@ -222,7 +242,7 @@ def collect(root):
         and not mismatches
         and epoch_sets == len(epoch_groups)
         and not epoch_mismatches
-        and (root / "origin/result.json").exists(),
+        and (artifact_directory(root, "evals") / "origin/result.json").exists(),
     }
     (root / "summary.json").write_text(json.dumps(summary, indent=2))
     return summary
@@ -292,7 +312,9 @@ def plot(root, output, labels=None, metric="UE"):
         facet_kws={"sharex": False},
         height=3.4,
     )
-    reference = json.loads((root / "origin/result.json").read_text())
+    reference = json.loads(
+        (artifact_directory(root, "evals") / "origin/result.json").read_text()
+    )
     for title, axis in grid.axes_dict.items():
         axis.set_xlabel(
             "Relearning epochs" if title.startswith("Epochs") else "Forget examples"
@@ -327,8 +349,7 @@ def evaluate(root, record):
     """Run the authors' full task evaluations after the training process exits."""
     import subprocess
 
-    config = json.loads(Path(record["config_path"]).read_text())
-    output = Path(config["logger"]["json"]["root"]) / config["logger"]["name"]
+    output = artifact_directory(root, "evals") / record["key"]
     for folder, task in [
         ("mmlu.json", "mmlu"),
         ("wmdp.json", "wmdp" if record["kind"] == "attack" else "wmdp_bio"),
@@ -339,13 +360,13 @@ def evaluate(root, record):
                 "--model",
                 "hf",
                 "--model_args",
-                f"pretrained={output / 'checkpoints'},cache_dir=./.cache,device_map=auto,parallelize=True",
+                f"pretrained={artifact_directory(root, 'models') / record['key']},cache_dir=./.cache,device_map=auto,parallelize=True",
                 "--tasks",
                 task,
                 "--batch_size",
                 "auto",
                 "--output_path",
-                str(output / folder),
+                str(output / "raw" / folder),
             ],
             check=True,
         )

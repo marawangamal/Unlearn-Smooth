@@ -13,7 +13,7 @@ spec.loader.exec_module(figure3)
 
 
 def test_prepare_preserves_frozen_manifest(tmp_path):
-    root = tmp_path / "run"
+    root = tmp_path / "artifacts/tamia/runs/run"
     recipe = json.loads((ROOT / "configs/reproduce/figure3-npo-sam.json").read_text())
     records = figure3.prepare(ROOT, root, tmp_path / "cache", recipe)
     manifest = (root / "experiments.json").read_bytes()
@@ -31,3 +31,21 @@ def test_prepare_preserves_frozen_manifest(tmp_path):
             * config["unlearn"]["gradient_accumulation_steps"]
             == 4
         )
+
+
+def test_prepared_paths_separate_models_and_evaluations(tmp_path):
+    root = tmp_path / "artifacts/tamia/runs/run"
+    recipe = json.loads((ROOT / "configs/reproduce/figure3-npo-sam.json").read_text())
+    records = figure3.prepare(ROOT, root, tmp_path / "cache", recipe)
+    models = tmp_path / "artifacts/tamia/models/run"
+    evals = tmp_path / "artifacts/tamia/evals/run"
+    for record in records:
+        config = json.loads(Path(record["config_path"]).read_text())
+        assert Path(config["logger"]["json"]["root"]) == evals
+        assert (evals / record["key"] / "checkpoints").resolve() == models / record[
+            "key"
+        ]
+        if record["kind"] == "attack":
+            assert Path(config["overall"]["model_name"]) == models / record["method"]
+    assert not (root / "models").exists()
+    assert not (root / "metrics").exists()

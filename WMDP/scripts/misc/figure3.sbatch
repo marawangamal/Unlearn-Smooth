@@ -18,14 +18,18 @@ export OMP_NUM_THREADS=8 MPLBACKEND=Agg
 source "$root/environment/bin/activate"
 cd "$root/source/WMDP"
 controller=scripts/misc/figure3.py
+run_name=$(basename "$root")
+tamia=$(dirname "$(dirname "$root")")
+evals="$tamia/evals/$run_name"
+figures="$tamia/../figures"
 if [[ "$kind" == origin ]]; then
     python "$controller" origin --root "$root" --model "$method"
     exit
 fi
 if [[ "$kind" == plot ]]; then
-    python "$controller" plot --root "$root" --output "$root/figures/figure3-npo-sam.pdf"
-    python "$controller" plot --root "$root" --output "$root/figures/figure3-npo-sam.png"
-    python "$controller" plot --root "$root" --metric MMLU --output "$root/figures/figure3-npo-sam-mmlu.pdf"
+    python "$controller" plot --root "$root" --output "$figures/$run_name.pdf"
+    python "$controller" plot --root "$root" --output "$figures/$run_name.png"
+    python "$controller" plot --root "$root" --metric MMLU --output "$figures/$run_name-mmlu.pdf"
     exit
 fi
 mapfile -t fields < <(python - "$root" "$kind" "$method" "${SLURM_ARRAY_TASK_ID:-0}" <<'PY'
@@ -42,13 +46,11 @@ PY
 key=${fields[0]}
 config=${fields[1]}
 steps=${fields[2]}
-metrics="$root/metrics/$key"
-mkdir "$metrics"
+metrics="$evals/$key"
+[[ ! -e "$metrics/runtime.json" && ! -e "$metrics/config.json" ]]
 if [[ "$kind" == attack ]]; then
-    [[ ! -e "$root/attacks/$key" ]]
     entry=relearn
 else
-    [[ ! -e "$root/models/$key" ]]
     entry=unlearn
 fi
 python scripts/misc/figure3_runtime.py --entry "$entry" --config "$config" --report "$metrics/runtime.json" --expected-steps "$steps"
