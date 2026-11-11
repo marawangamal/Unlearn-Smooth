@@ -36,8 +36,9 @@ done
 cd WMDP
 
 for method in "${methods[@]}"; do
-    lm_eval --model hf \
-        --model_args "pretrained=$models/$method,cache_dir=./.cache,device_map=auto,parallelize=True" \
+    accelerate launch --multi_gpu --num_processes 4 --num_machines 1 \
+        --mixed_precision no -m lm_eval --model hf \
+        --model_args "pretrained=$models/$method,cache_dir=./.cache" \
         --tasks mmlu,wmdp_bio \
         --batch_size auto \
         --output_path "$evals/$method/evaluation-$SLURM_JOB_ID"
