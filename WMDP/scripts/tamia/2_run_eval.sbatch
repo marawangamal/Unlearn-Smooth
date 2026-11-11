@@ -24,7 +24,12 @@ artifacts=$(realpath artifacts)
 run_name=${1:?Pass the matching unlearning run name}
 models="$artifacts/tamia/models/$run_name"
 evals="$artifacts/tamia/evals/$run_name"
-methods=(npo npo-sam npo-n60-m1-seed1 npo-sam-n60-m1-seed1)
+methods=(npo npo-sam)
+for method in npo npo-sam; do
+    for samples in 20 40 60; do
+        methods+=("$method-n$samples-m1-seed1")
+    done
+done
 for method in "${methods[@]}"; do
     [[ -f "$models/$method/config.json" ]]
 done

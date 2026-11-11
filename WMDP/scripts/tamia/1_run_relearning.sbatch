@@ -25,25 +25,23 @@ run_name=${1:?Pass the matching unlearning run name}
 models="$artifacts/tamia/models/$run_name"
 evals="$artifacts/tamia/evals/$run_name"
 [[ -f "$models/npo/config.json" && -f "$models/npo-sam/config.json" ]]
-for method in npo-n60-m1-seed1 npo-sam-n60-m1-seed1; do
-    [[ ! -e "$models/$method" && ! -e "$evals/$method" ]]
-    mkdir -p "$models/$method" "$evals/$method"
-    ln -s "$models/$method" "$evals/$method/checkpoints"
-done
 cd WMDP
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python src/exec/relearn_model.py \
-    --config-file configs/unlearn/wmdp/Relearn+Forget.json \
-    --overall.model_name "$models/npo" \
-    --unlearn.max_steps=15 \
-    --overall.cache_dir "$HF_HOME/hub" \
-    --logger.name npo-n60-m1-seed1 \
-    --logger.json.root "$evals"
+# Effective batch size is four: 5, 10, and 15 steps use 20, 40, and 60 samples.
+for method in npo npo-sam; do
+    for steps in 5 10 15; do
+        samples=$((4 * steps))
+        name="$method-n$samples-m1-seed1"
+        [[ ! -e "$models/$name" && ! -e "$evals/$name" ]]
+        mkdir -p "$models/$name" "$evals/$name"
+        ln -s "$models/$name" "$evals/$name/checkpoints"
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python src/exec/relearn_model.py \
-    --config-file configs/unlearn/wmdp/Relearn+Forget.json \
-    --overall.model_name "$models/npo-sam" \
-    --unlearn.max_steps=15 \
-    --overall.cache_dir "$HF_HOME/hub" \
-    --logger.name npo-sam-n60-m1-seed1 \
-    --logger.json.root "$evals"
+        CUDA_VISIBLE_DEVICES=0,1,2,3 python src/exec/relearn_model.py \
+            --config-file configs/unlearn/wmdp/Relearn+Forget.json \
+            --overall.model_name "$models/$method" \
+            --unlearn.max_steps="$steps" \
+            --overall.cache_dir "$HF_HOME/hub" \
+            --logger.name "$name" \
+            --logger.json.root "$evals"
+    done
+done

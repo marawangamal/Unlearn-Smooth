@@ -56,11 +56,31 @@ if __name__ == "__main__":
     configs = [
         {"path": osp.join(rootdir, "npo"), "name": "NPO", "samples": 0},
         {
+            "path": osp.join(rootdir, "npo-n20-m1-seed1"),
+            "name": "NPO",
+            "samples": 20,
+        },
+        {
+            "path": osp.join(rootdir, "npo-n40-m1-seed1"),
+            "name": "NPO",
+            "samples": 40,
+        },
+        {
             "path": osp.join(rootdir, "npo-n60-m1-seed1"),
             "name": "NPO",
             "samples": 60,
         },
         {"path": osp.join(rootdir, "npo-sam"), "name": "NPO+SAM", "samples": 0},
+        {
+            "path": osp.join(rootdir, "npo-sam-n20-m1-seed1"),
+            "name": "NPO+SAM",
+            "samples": 20,
+        },
+        {
+            "path": osp.join(rootdir, "npo-sam-n40-m1-seed1"),
+            "name": "NPO+SAM",
+            "samples": 40,
+        },
         {
             "path": osp.join(rootdir, "npo-sam-n60-m1-seed1"),
             "name": "NPO+SAM",
