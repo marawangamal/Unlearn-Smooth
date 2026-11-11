@@ -54,17 +54,17 @@ if __name__ == "__main__":
 
     rootdir = osp.join("artifacts/tamia/evals", args.run_name)
     configs = [
-        {"path": osp.join(rootdir, "npo"), "name": "NPO", "step": 0},
+        {"path": osp.join(rootdir, "npo"), "name": "NPO", "samples": 0},
         {
             "path": osp.join(rootdir, "npo-n60-m1-seed1"),
             "name": "NPO",
-            "step": 15,
+            "samples": 60,
         },
-        {"path": osp.join(rootdir, "npo-sam"), "name": "NPO+SAM", "step": 0},
+        {"path": osp.join(rootdir, "npo-sam"), "name": "NPO+SAM", "samples": 0},
         {
             "path": osp.join(rootdir, "npo-sam-n60-m1-seed1"),
             "name": "NPO+SAM",
-            "step": 15,
+            "samples": 60,
         },
     ]
 
@@ -75,7 +75,7 @@ if __name__ == "__main__":
             rows.append(
                 {
                     "Method": cfg["name"],
-                    "Step": cfg["step"],
+                    "Samples": cfg["samples"],
                     "Score (%)": 100 * get_metric(task_results[task]),
                     "Eval": task_to_task[task],
                 }
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     sns.set_theme(context="paper", style="ticks", font_scale=1.2)
     grid = sns.relplot(
         data=df,
-        x="Step",
+        x="Samples",
         y="Score (%)",
         hue="Method",
         col="Eval",
@@ -95,7 +95,7 @@ if __name__ == "__main__":
         aspect=1.2,
     )
     grid.set_titles("{col_name}")
-    grid.set_axis_labels("Relearning step", "Score (%)")
-    grid.set(xticks=sorted(df["Step"].unique()))
+    grid.set_axis_labels("Relearning samples", "Score (%)")
+    grid.set(xticks=sorted(df["Samples"].unique()))
     os.makedirs(osp.dirname(args.outpath) or ".", exist_ok=True)
     grid.figure.savefig(args.outpath, bbox_inches="tight")
