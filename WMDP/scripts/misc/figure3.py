@@ -314,10 +314,9 @@ def plot(root, output, labels=None, metric="UE"):
     legend["Origin"] = Line2D([], [], color="black", linestyle="--")
     grid.legend.remove()
     grid.add_legend(legend_data=legend)
+    grid.set_titles("{col_name}")
     grid.set_ylabels(
-        "Unlearning effectiveness (1 − accuracy)"
-        if metric == "UE"
-        else "Full MMLU accuracy"
+        "UE (1 − WMDP accuracy)" if metric == "UE" else "Full MMLU accuracy"
     )
     os.makedirs(os.path.dirname(str(output)) or ".", exist_ok=True)
     grid.figure.savefig(output, bbox_inches="tight")
